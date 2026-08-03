@@ -38,7 +38,7 @@ The project presents a viable opportunity for students to engage with the comple
 # AI Research Intelligence Agent for Business Insight Translation
 
 **Company / Org:** KPMG  
-**Challenge Advisor:** Allison Tatterson, [Email address]  
+**Challenge Advisor:** Abhinav Raghunathan, [Email address]  
 **Program:** Break Through Tech AI Studio - Fall 2026
 
 ---
