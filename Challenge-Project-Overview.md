@@ -2,7 +2,9 @@
 # AI Research Intelligence Agent for Business Insight Translation
 
 **Company / Org:** KPMG  
-**Challenge Advisor:** Abhinav Raghunathan, abhinavraghunathan@kpmg.com  
+
+**Challenge Advisor:** Abhinav Raghunathan, abhinavraghunathan@kpmg.com 
+
 **AI Coach:** Alexandra Ladyzhensky, alexandra.ladyzhensky@breakthroughtech.org
 
 **Program Manager:** Tyla Daniels, tyla.daniels@breakthroughtech.org
