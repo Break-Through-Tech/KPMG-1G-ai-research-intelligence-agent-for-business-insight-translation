@@ -1,120 +1,163 @@
-# AI Studio Challenge Project Title
+# AI Research Intelligence Agent for Business Insight Translation
 
-> 💡 **Note for the team:** This is just a template. Update the above title with your AI Studio Challenge Project name. Remove all guidance notes and example text in this template and populate this README with your own content. You can work on this README throughout AI Studio, and get feedback from your AI Studio Coach and Challenge Advisor before finalizing it.  
+A retrieval-augmented generation (RAG) system over public AI research from arXiv. Given a
+natural-language question, it retrieves the relevant papers, summarizes the findings, and
+translates them into business-relevant implications with citations back to the source papers.
 
----
-
-### 👥 **Team Members**
-
-**Example:**
-
-| Name                  | GitHub Handle    | Contribution                                                                     |
-|-----------------------|------------------|--------------------------------------------------------------------------|
-| Sarah Khadder         | @skhadder        | xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                 |
-| Arsenii Chan          | @ArseniiChan     | xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                 |
-| Amy Weston            | @amyweston       | xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                 |
-| Nathanielle Onchengco | @Nathanielle-dev | Model selection, hyperparameter tuning, model training and optimization  |
+**Host company:** KPMG
+**Program:** Break Through Tech AI Studio, Fall 2026 (Team KPMG 1G)
+**Challenge Advisor:** Abhinav Raghunathan, KPMG
+**AI Studio Coach:** Alexandra Ladyzhensky, Break Through Tech
 
 ---
 
-## 🎯 **Project Highlights**
+### Team Members
 
-**Example:**
-
-- Developed a machine learning model using `[model type/technique]` to address `[challenge project task]`.
-- Achieved `[key metric or result]`, demonstrating `[value or impact]` for `[host company]`.
-- Generated actionable insights to inform business decisions at `[host company or stakeholders]`.
-- Implemented `[specific methodology]` to address industry constraints or expectations.
-
----
-
-## 👩🏽‍💻 **Setup and Installation**
-
-**Provide step-by-step instructions so someone else can run your code and reproduce your results. Depending on your setup, include:**
-
-* How to clone the repository
-* How to install dependencies
-* How to set up the environment
-* How to access the dataset(s)
-* How to run the notebook or scripts
+| Name | GitHub Handle | Contribution |
+|---|---|---|
+| Arsenii Chan | @ArseniiChan | Repo and environment setup, parsing and chunking pipeline, baseline RAG pipeline |
+| Sarah Khadder | @skhadder | Evaluation framework: benchmark queries and scoring rubrics |
+| Amy Weston | @amyweston | Exploratory data analysis, baseline RAG pipeline |
+| Nathanielle Onchengco | _pending org invite_ | arXiv corpus collection and metadata |
 
 ---
 
-## 🏗️ **Project Overview**
+## Project Overview
 
-**Describe:**
+KPMG needs a faster way to monitor the volume of AI research being published and turn it into
+something a business audience can act on. Reading and triaging arXiv by hand does not scale.
 
-- How this project is connected to the Break Through Tech AI Program
-- Your AI Studio host company and the project objective and scope
-- The real-world significance of the problem and the potential impact of your work
+This project builds a prototype that does three things:
 
----
+1. **Retrieve** the papers relevant to a natural-language query
+2. **Summarize** what each paper actually found
+3. **Translate** those findings into business implications, with citations
 
-## 📊 **Data Exploration**
+Scope is a working prototype with a documented evaluation approach. Out of scope: production
+deployment, fine-tuning foundation models, autonomous multi-agent orchestration, and any use of
+PII, regulated, internal, or client data.
 
-**You might consider describing the following (as applicable):**
-
-* The dataset(s) used: origin, format, size, type of data
-* Data exploration and preprocessing approaches
-* Insights from your Exploratory Data Analysis (EDA)
-* Challenges and assumptions when working with the dataset(s)
-
-**Potential visualizations to include:**
-
-* Plots, charts, heatmaps, feature visualizations, sample dataset images
+**Success criteria (set by the Challenge Advisor):** retrieval relevance, summary accuracy and
+clarity, business usefulness of the translated output, and human validation by KPMG stakeholders.
 
 ---
 
-## 🧠 **Model Development**
+## Milestones
 
-**You might consider describing the following (as applicable):**
+| Month | Milestone | Status |
+|---|---|---|
+| September | Foundation and baseline RAG: ingest the arXiv corpus, define the evaluation framework, stand up a baseline retrieval pipeline | In progress |
+| October | Pipeline development and evaluation: retrieval + summarization, prompt engineering for business translation | Not started |
+| November | Refinement, interaction layer, documentation and final delivery | Not started |
 
-* Model(s) used (e.g., CNN with transfer learning, regression models)
-* Feature selection and Hyperparameter tuning strategies
-* Training setup (e.g., % of data for training/validation, evaluation metric, baseline performance)
-
-
----
-
-## 📈 **Results & Key Findings**
-
-**You might consider describing the following (as applicable):**
-
-* Performance metrics (e.g., Accuracy, F1 score, RMSE)
-* How your model performed
-* Insights from evaluating model fairness
-
-**Potential visualizations to include:**
-
-* Confusion matrix, precision-recall curve, feature importance plot, prediction distribution, outputs from fairness or explainability tools
+Tasks are tracked as GitHub Issues against the matching Milestone and on our
+[GitHub Project board](https://github.com/orgs/Break-Through-Tech/projects/224).
 
 ---
 
-## 🚀 **Next Steps**
+## Repository Structure
 
-**You might consider addressing the following (as applicable):**
+```
+.
+├── data/                 # arXiv PDFs and metadata
+├── notebooks/            # EDA and experiments
+└── README.md
+```
 
-* What are some of the limitations of your model?
-* What would you do differently with more time/resources?
-* What additional datasets or techniques would you explore?
-
----
-
-## 📝 **License**
-
-Specify how your project can be used by others. Choose an appropriate license and link it here (e.g., MIT, Apache 2.0). Make sure your Challenge Advisor approves of the selected license type. 
-
-**Example:**
-This project is licensed under the MIT License.
+`src/` for reusable ingestion, retrieval and evaluation code, and `data/processed/` for parsed
+output, will be added alongside the first pipeline code.
 
 ---
 
-## 📄 **References** (Optional but encouraged)
+## Setup and Installation
 
-Cite relevant papers, articles, or resources that supported your project.
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/Break-Through-Tech/KPMG-1G-ai-research-intelligence-agent-for-business-insight-translation.git
+cd KPMG-1G-ai-research-intelligence-agent-for-business-insight-translation
+```
+
+**2. Create a virtual environment**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+```
+
+The dependency list is still being settled with our AI Studio Coach, so `requirements.txt` is not
+final yet. Until it is, install per-notebook in Colab.
+
+**3. Environment variables**
+
+API keys go in a local `.env` file. Never commit a key.
+
+**4. Data**
+
+Five seeded arXiv cs.AI papers are already in `data/`. The full corpus is pulled by the
+ingestion script (see Issue #2) rather than committed by hand.
+
+**5. Shared Colab notebook**
+
+Shared team notebook: [KPMG1G_baseline_rag.ipynb](https://colab.research.google.com/drive/1XHMbyuiAU2lzfe9NQBzN-Uz2XzLwgiBT)
+
+Shared Drive folder: [KPMG 1G — AI Studio Fall 2026](https://drive.google.com/drive/folders/1AGX5d8Osa8sMA0KQxRUkUPwzUZWLAVgg)
 
 ---
 
-## 🙏 **Acknowledgements** (Optional but encouraged)
+## Data Exploration
 
-Thank your Challenge Advisor, host company representatives, TA, and others who supported your project.
+Dataset: recent papers from [arXiv cs.AI](https://arxiv.org/list/cs.AI/recent), PDF plus
+metadata (id, title, authors, date, abstract, categories). Under 1 GB.
+
+EDA is tracked in Issue #3 and will cover length distribution, section structure, per-paper parse
+failure rate, and metadata gaps. Findings and visualizations will be added here once that work
+lands.
+
+---
+
+## Model Development
+
+Baseline stack, per the Challenge Advisor's recommended tooling:
+
+| Stage | Choice |
+|---|---|
+| PDF parsing | `pypdf` |
+| Embeddings | `sentence-transformers` |
+| Vector store | `ChromaDB` |
+| Orchestration | `LangChain` |
+| Generation | Free-tier LLM API |
+
+Chunking strategy will be set from the EDA results rather than guessed. Details to follow once the
+baseline is running.
+
+---
+
+## Results and Key Findings
+
+Not yet available. The baseline retrieval score is due at the end of September (Issue #5) and will
+be recorded here with the evaluation method alongside it.
+
+Planned metrics: Recall@k for retrieval relevance, and 1-5 team rubrics for summary accuracy and
+business usefulness.
+
+---
+
+## Next Steps
+
+- Finish the September milestone: corpus ingestion, EDA, chunking pipeline, baseline RAG
+- Record the baseline evaluation score before adding any improvements
+- Confirm target paper count and benchmark queries with the Challenge Advisor
+
+---
+
+## License
+
+To be selected with the Challenge Advisor's approval.
+
+---
+
+## Acknowledgements
+
+Thank you to Abhinav Raghunathan (KPMG) for advising this project, and to Alexandra Ladyzhensky
+and the Break Through Tech AI Studio team for their support.
