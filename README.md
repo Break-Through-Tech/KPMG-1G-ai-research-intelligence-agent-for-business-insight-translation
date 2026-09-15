@@ -18,7 +18,7 @@ translates them into business-relevant implications with citations back to the s
 | Arsenii Chan | @ArseniiChan | Repo and environment setup, parsing and chunking pipeline, baseline RAG pipeline |
 | Sarah Khadder | @skhadder | Evaluation framework: benchmark queries and scoring rubrics |
 | Amy Weston | @amyweston | Exploratory data analysis, baseline RAG pipeline |
-| Nathanielle Onchengco | _pending org invite_ | arXiv corpus collection and metadata |
+| Nathanielle Onchengco | @Nathanielle-dev | arXiv corpus collection and metadata |
 
 ---
 
