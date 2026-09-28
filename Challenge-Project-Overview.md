@@ -3,7 +3,7 @@
 
 **Company / Org:** KPMG  
 
-**Challenge Advisor:** Abhinav Raghunathan, abhinavraghunathan@kpmg.com 
+**Challenge Advisor:** Ari Krause, arikrause@kpmg.com
 
 **AI Coach:** Alexandra Ladyzhensky, alexandra.ladyzhensky@breakthroughtech.org
 
