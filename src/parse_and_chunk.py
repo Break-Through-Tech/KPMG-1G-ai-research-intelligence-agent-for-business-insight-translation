@@ -26,6 +26,7 @@ import csv
 import hashlib
 import json
 import logging
+import math
 import random
 import re
 import sys
@@ -43,8 +44,14 @@ ARXIV_STAMP_RE = re.compile(r"arXiv:\d{4}\.\d{4,5}v\d+\s+\[[\w.\-]+\]\s+\d{1,2}\
 PAGE_NUMBER_RE = re.compile(r"^\s*(page\s+)?\d{1,3}(\s+of\s+\d{1,3})?\s*$", re.IGNORECASE)
 REFERENCES_RE = re.compile(r"^\s*(\d{1,2}\.?\s+)?(references|bibliography)\s*$", re.IGNORECASE)
 ACKNOWLEDGMENTS_RE = re.compile(r"^\s*(\d{1,2}\.?\s+)?acknowledge?ments?\s*$", re.IGNORECASE)
-# First appendix heading after the references: "Appendix ...", "A Title" or "A Title 19" (TOC line).
-APPENDIX_RE = re.compile(r"^\s*(appendix\b.{0,80}|A\.?\s+[A-Z][^\d]{2,70}(\s+\d{1,3})?)\s*$", re.IGNORECASE)
+# First appendix heading after the references: "Appendix ...", or a lettered heading
+# like "A Title", "A. Title" or "A Title 19" (TOC line). The lettered form is checked
+# further in is_appendix_heading() so bibliography entries such as "A. Smith and
+# Jones" are not mistaken for a heading.
+APPENDIX_WORD_RE = re.compile(r"^\s*appendix\b.{0,80}$", re.IGNORECASE)
+APPENDIX_LETTER_RE = re.compile(r"^\s*A(?P<dot>\.?)\s+(?P<title>[A-Z][^\d]{2,70}?)(\s+\d{1,3})?\s*$")
+CITATION_RE = re.compile(r",|\bet al\b")  # never in a heading
+DOTTED_NAME_RE = re.compile(r"\b[A-Z]\.\s|\band\b")  # "A. Smith and Jones", "A. B. Smith"
 SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(\[\"'])")
 WORD_RE = re.compile(r"[a-z0-9]+")
 
@@ -106,7 +113,8 @@ def strip_running_lines(pages: list[str], edge: int = 2, min_share: float = 0.3)
     for lines in page_lines:
         if len(lines) > 2 * edge:
             edge_counts.update({_line_key(ln) for ln in lines[:edge] + lines[-edge:] if len(ln.split()) <= 15})
-    threshold = max(3, int(min_share * len(pages)))
+    # A line has to repeat to be "running", so never accept a single page.
+    threshold = max(2, math.ceil(min_share * len(pages)))
     running = {key for key, count in edge_counts.items() if count >= threshold}
 
     cleaned = []
@@ -122,6 +130,20 @@ def strip_running_lines(pages: list[str], edge: int = 2, min_share: float = 0.3)
                 kept.append(ln)
         cleaned.append(kept)
     return cleaned
+
+
+def is_appendix_heading(line: str) -> bool:
+    """True for "Appendix ..." or a lettered heading like "A Proofs", not a citation."""
+    if APPENDIX_WORD_RE.match(line):
+        return True
+    m = APPENDIX_LETTER_RE.match(line)
+    if not m:
+        return False
+    title = m["title"]
+    if CITATION_RE.search(title):
+        return False
+    # "A." followed by more initials or "and" between names is an author list.
+    return not (m["dot"] and DOTTED_NAME_RE.search(title))
 
 
 def remove_back_matter(page_lines: list[list[str]]) -> tuple[list[tuple[int, str, str]], bool, bool]:
@@ -145,7 +167,7 @@ def remove_back_matter(page_lines: list[list[str]]) -> tuple[list[tuple[int, str
             cut_idx = i
             break
 
-    app_idx = next((i for i in range(ref_idx + 1, len(flat)) if APPENDIX_RE.match(flat[i][1])), None)
+    app_idx = next((i for i in range(ref_idx + 1, len(flat)) if is_appendix_heading(flat[i][1])), None)
 
     out = [(p, "body", ln) for p, ln in flat[:cut_idx]]
     if app_idx is not None:
@@ -412,6 +434,12 @@ def main(argv: list[str] | None = None) -> None:
         help="Jaccard similarity on word 5-grams above which a chunk is dropped",
     )
     args = parser.parse_args(argv)
+    if args.max_words <= 0:
+        parser.error("--max-words must be a positive integer")
+    if not 0 <= args.overlap_words < args.max_words:
+        parser.error("--overlap-words must be at least 0 and smaller than --max-words")
+    if not 0 < args.dedup_threshold <= 1:
+        parser.error("--dedup-threshold must be in (0, 1]")
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logging.getLogger("pypdf").setLevel(logging.ERROR)  # font-encoding warnings, not actionable here

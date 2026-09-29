@@ -33,6 +33,14 @@ class StripRunningLinesTest(unittest.TestCase):
         pages = [page(i).replace("Paragraph line C", "Table 1") for i in range(1, 9)]
         self.assertTrue(all(any(ln.startswith("Table 1") for ln in lines) for lines in pc.strip_running_lines(pages)))
 
+    def test_header_threshold_follows_min_share(self):
+        # 2 of 5 pages is 40%, above the 30% default, so the header goes.
+        pages = [page(i, header="Short Header") if i <= 2 else page(i, header=f"Unique {i}") for i in range(1, 6)]
+        self.assertNotIn("Short Header", pc.strip_running_lines(pages)[0])
+        # 3 of 11 pages is 27%, below 30%, so it stays.
+        pages = [page(i, header="Short Header") if i <= 3 else page(i, header=f"Unique {i}") for i in range(1, 12)]
+        self.assertIn("Short Header", pc.strip_running_lines(pages)[0])
+
     def test_keeps_short_pages_intact(self):
         self.assertEqual(pc.strip_running_lines(["Title", "Title"] * 2)[0], ["Title"])
 
@@ -58,6 +66,19 @@ class BackMatterTest(unittest.TestCase):
         text = [ln for _, _, ln in pc.remove_back_matter(pages)[0]]
         self.assertIn("Last result.", text)
         self.assertNotIn("Funded by a grant.", text)
+
+    def test_citation_after_references_is_not_an_appendix(self):
+        pages = self.make(["Conclusion text.", "References", "A. Smith and Jones", "Some venue."])
+        lines, refs, appendix = pc.remove_back_matter(pages)
+        self.assertTrue(refs)
+        self.assertFalse(appendix)
+        self.assertNotIn("A. Smith and Jones", [ln for _, _, ln in lines])
+
+    def test_appendix_heading_forms(self):
+        for line in ["Appendix B: Extra results", "A Proof of Theorem 1", "A. Implementation Details", "A Additional Results 19"]:
+            self.assertTrue(pc.is_appendix_heading(line), line)
+        for line in ["A. Smith and Jones", "A. Vaswani, N. Shazeer", "A Smith et al"]:
+            self.assertFalse(pc.is_appendix_heading(line), line)
 
     def test_no_references_heading_keeps_everything(self):
         pages = self.make(["Just text."])
@@ -138,3 +159,15 @@ class CorpusTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CliValidationTest(unittest.TestCase):
+    def test_rejects_bad_numbers(self):
+        for args in (["--max-words", "0"], ["--max-words", "-5"], ["--overlap-words", "120"], ["--dedup-threshold", "0"]):
+            with self.assertRaises(SystemExit), open("/dev/null", "w") as devnull:
+                old, sys.stderr = sys.stderr, devnull
+                try:
+                    pc.main(args)
+                finally:
+                    sys.stderr = old
+
