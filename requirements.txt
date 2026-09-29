@@ -1,1 +1,21 @@
+# KPMG 1G - AI Research Intelligence Agent
+# Install with: pip install -r requirements.txt
 
+# PDF parsing (src/parse_and_chunk.py)
+pypdf>=5.0.0
+
+# Embeddings and vector store (src/build_index.py, src/evaluate_retrieval.py)
+sentence-transformers>=3.0.0
+chromadb>=0.5.0
+
+# Orchestration, for the generation step after the retrieval baseline
+langchain>=0.3.0
+langchain-community>=0.3.0
+
+# arXiv corpus pull (Issue #2) and data handling
+arxiv>=2.1.0
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Config
+python-dotenv>=1.0.0

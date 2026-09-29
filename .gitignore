@@ -1,1 +1,30 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Generated data and vector store
+# Pulled PDFs can be 20+ MB each, so they stay out of git (pull_arxiv.py re-downloads them).
+# The 5 seeded PDFs are already tracked and are not affected by this rule.
+data/*.pdf
+chroma_db/
+*.sqlite3
+data/processed/*
+!data/processed/.gitkeep
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
