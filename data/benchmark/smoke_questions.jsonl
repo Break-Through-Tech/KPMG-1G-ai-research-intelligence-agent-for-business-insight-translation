@@ -1,0 +1,10 @@
+{"id": "s01", "question": "How can a system decide when it is worth paying for a more accurate estimate before routing a query to one of several specialist models?", "relevant_arxiv_ids": ["2608.20316v1"]}
+{"id": "s02", "question": "Is there a decentralized routing approach where models decide on their own whether to self-assess before bidding for a query?", "relevant_arxiv_ids": ["2608.20316v1"]}
+{"id": "s03", "question": "Can AI agents design better training algorithms, and how would you benchmark that for recursive self-improvement?", "relevant_arxiv_ids": ["2608.20318v1"]}
+{"id": "s04", "question": "What happens when an agent gets a few GPU hours to rewrite the training code of a frozen research repository?", "relevant_arxiv_ids": ["2608.20318v1"]}
+{"id": "s05", "question": "How can we learn reusable, auditable models of how employees do their work from recorded screen activity?", "relevant_arxiv_ids": ["2608.20319v1"]}
+{"id": "s06", "question": "Which method separates interleaved tasks in a raw computer-use recording and builds a goal hierarchy for each?", "relevant_arxiv_ids": ["2608.20319v1"]}
+{"id": "s07", "question": "Can a chatbot-run survey and locally hosted LLMs predict commuters' travel mode choices under different weather?", "relevant_arxiv_ids": ["2608.20320v1"]}
+{"id": "s08", "question": "How do zero-shot LLMs compare with random forest for predicting how people travel when it snows?", "relevant_arxiv_ids": ["2608.20320v1"]}
+{"id": "s09", "question": "How can a model explain lab reports and medical findings to patients who are not experts?", "relevant_arxiv_ids": ["2608.20331v1"]}
+{"id": "s10", "question": "What reinforcement learning approach uses weighted checklists and claim verification to improve factuality of generated reports?", "relevant_arxiv_ids": ["2608.20331v1"]}
