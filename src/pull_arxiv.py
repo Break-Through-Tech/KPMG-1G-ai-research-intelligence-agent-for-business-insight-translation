@@ -3,6 +3,11 @@
     python src/pull_arxiv.py                      # newest 50 cs.AI papers
     python src/pull_arxiv.py --max 200            # more
     python src/pull_arxiv.py --metadata-only      # refresh metadata.csv, no PDF downloads
+    python src/pull_arxiv.py --ids-from data/metadata.csv   # re-pull the exact papers in a metadata file
+
+"Newest" changes every day, so two people running the default pull get different
+papers. Once the team settles on a corpus, commit data/metadata.csv and have
+everyone else use --ids-from so the index and the benchmark answer keys match.
 
 Safe to rerun: papers already in data/ (matched by arXiv id, any version) are not
 downloaded again, and data/metadata.csv is rewritten to cover every PDF in data/,
@@ -71,6 +76,20 @@ def download(url: str, dest: Path) -> None:
     tmp.rename(dest)
 
 
+def read_ids(path: Path) -> list[str]:
+    """arXiv ids from a metadata.csv (arxiv_id column) or a plain file with one id per line."""
+    if path.suffix == ".csv":
+        with open(path, newline="", encoding="utf-8") as f:
+            ids = [row["arxiv_id"].strip() for row in csv.DictReader(f)]
+    else:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        ids = [line.split("#")[0].strip() for line in lines]
+    ids = [i for i in ids if i]
+    if not ids:
+        raise SystemExit(f"No arXiv ids found in {path}")
+    return list(dict.fromkeys(ids))
+
+
 def to_row(result, pdf_file: str) -> dict:
     return {
         "arxiv_id": result.get_short_id(),
@@ -85,7 +104,7 @@ def to_row(result, pdf_file: str) -> dict:
     }
 
 
-def pull(data_dir: Path, category: str, max_results: int, metadata_only: bool) -> list[dict]:
+def pull(data_dir: Path, category: str, max_results: int, metadata_only: bool, ids: list[str] | None = None) -> list[dict]:
     import arxiv
 
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -94,12 +113,15 @@ def pull(data_dir: Path, category: str, max_results: int, metadata_only: bool) -
 
     rows: dict[str, dict] = {}
     new = 0
-    search = arxiv.Search(
-        query=f"cat:{category}",
-        max_results=max_results,
-        sort_by=arxiv.SortCriterion.SubmittedDate,
-        sort_order=arxiv.SortOrder.Descending,
-    )
+    if ids:  # a fixed list, so every teammate ends up with the same corpus
+        search = arxiv.Search(id_list=ids)
+    else:
+        search = arxiv.Search(
+            query=f"cat:{category}",
+            max_results=max_results,
+            sort_by=arxiv.SortCriterion.SubmittedDate,
+            sort_order=arxiv.SortOrder.Descending,
+        )
     for result in client.results(search):
         bid = base_id(result.get_short_id())
         if bid in on_disk:
@@ -144,13 +166,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--category", default="cs.AI")
     parser.add_argument("--max", type=int, default=50, help="how many of the newest papers to pull")
     parser.add_argument("--metadata-only", action="store_true")
+    parser.add_argument("--ids-from", type=Path, help="metadata.csv or a file of arXiv ids; pulls exactly those papers and ignores --max")
     args = parser.parse_args(argv)
     if args.max <= 0:
         parser.error("--max must be positive")
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logging.getLogger("arxiv").setLevel(logging.WARNING)
-    rows = pull(args.data, args.category, args.max, args.metadata_only)
+    ids = read_ids(args.ids_from) if args.ids_from else None
+    rows = pull(args.data, args.category, args.max, args.metadata_only, ids)
     write_metadata(rows, args.data / "metadata.csv")
     log.info("Wrote %s", args.data / "metadata.csv")
 
