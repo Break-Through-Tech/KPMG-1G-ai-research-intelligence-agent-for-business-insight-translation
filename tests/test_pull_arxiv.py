@@ -31,5 +31,26 @@ class FilenameTest(unittest.TestCase):
         self.assertEqual(pa.base_id("2608.20316v3"), "2608.20316")
 
 
+class ReadIdsTest(unittest.TestCase):
+    def test_reads_metadata_csv_column(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d, "metadata.csv")
+            path.write_text("arxiv_id,title\n2608.20316v1,A\n2610.18813v1,B\n2608.20316v1,A\n", encoding="utf-8")
+            self.assertEqual(pa.read_ids(path), ["2608.20316v1", "2610.18813v1"])
+
+    def test_reads_plain_list_with_comments(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d, "ids.txt")
+            path.write_text("2608.20316v1  # seeded\n\n2610.18813v1\n", encoding="utf-8")
+            self.assertEqual(pa.read_ids(path), ["2608.20316v1", "2610.18813v1"])
+
+    def test_empty_file_is_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d, "ids.txt")
+            path.write_text("\n", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                pa.read_ids(path)
+
+
 if __name__ == "__main__":
     unittest.main()
