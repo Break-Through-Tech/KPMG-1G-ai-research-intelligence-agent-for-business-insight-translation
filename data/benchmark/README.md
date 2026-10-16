@@ -1,4 +1,5 @@
-@@ -11,10 +11,25 @@
+| field | meaning |
+|---|---|
 | `id` | short unique id |
 | `question` | phrased the way a KPMG analyst would ask it |
 | `relevant_arxiv_ids` | the paper(s) that should come back, matching the ids in `data/` filenames |
