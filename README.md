@@ -6,7 +6,9 @@ translates them into business-relevant implications with citations back to the s
 
 **Host company:** KPMG
 **Program:** Break Through Tech AI Studio, Fall 2026 (Team KPMG 1G)
+
 **Challenge Advisor:** Abhinav Raghunathan, KPMG
+
 **AI Studio Coach:** Alexandra Ladyzhensky, Break Through Tech
 
 ---
