@@ -156,11 +156,43 @@ baseline is running.
 
 ## Results and Key Findings
 
-Not yet available. The baseline retrieval score is due at the end of September (Issue #5) and will
-be recorded here with the evaluation method alongside it.
+### Baseline retrieval (Oct 27)
 
-Planned metrics: Recall@k for retrieval relevance, and 1-5 team rubrics for summary accuracy and
-business usefulness.
+Corpus: 50 arXiv cs.AI papers, listed in `data/metadata.csv`. That is the 20 papers the benchmark
+asks about (`data/benchmark_ids.txt`) plus the 30 newest cs.AI papers on Oct 27. 5,897 chunks,
+`all-MiniLM-L6-v2` embeddings, ChromaDB, default chunking (120 words, 20 overlap).
+
+Benchmark: the 26 questions in `data/benchmark/questions.jsonl` (20 single-paper, 6 multi-paper).
+
+| Metric | Score |
+|---|---|
+| Recall@1 | 0.542 |
+| Recall@3 | 0.814 |
+| Recall@5 | 0.846 |
+| MRR | 0.762 |
+
+What the misses show:
+- 10 of 26 questions miss or rank the right paper below first. 3 of the 6 multi-paper questions
+  (q24, q25, q26) are in that group, and q25 gets none of its papers in the top 5.
+- 2610.18842v1 (physical recursive self-improvement) shows up in the top 5 of 8 of the 10 misses.
+  It pulls in anything that mentions agents improving themselves.
+- 2608.20331v1 (G-CARL) parses badly: pypdf drops the word spacing, so 20 of its chunks are
+  thrown out as garbled and only 25 are left.
+
+For comparison, the 10 smoke questions score Recall@1 0.900 and MRR 0.950. They are written from
+the abstracts, so they overstate how well retrieval works. The numbers above are the baseline.
+
+To reproduce:
+
+```bash
+python src/pull_arxiv.py --ids-from data/metadata.csv
+python src/parse_and_chunk.py
+python src/build_index.py
+python src/evaluate_retrieval.py --benchmark data/benchmark/questions.jsonl
+```
+
+Summary accuracy and business usefulness (1-5 rubrics) are not scored yet. That needs the
+summarization step.
 
 ---
 
