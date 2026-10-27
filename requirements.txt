@@ -19,3 +19,6 @@ numpy>=1.26.0
 
 # Config
 python-dotenv>=1.0.0
+
+# Charts from the eval output (src/plot_eval.py)
+matplotlib>=3.8.0
