@@ -1,5 +1,6 @@
 """Run from the repo root: python -m unittest discover -s tests -v"""
 
+import json
 import sys
 import tempfile
 import unittest
@@ -145,19 +146,109 @@ class FilterTest(unittest.TestCase):
         self.assertFalse(dedup.is_duplicate(" ".join(f"other{i}" for i in range(120))))
 
 
+SEEDED = ("2608.20316v1", "2608.20318v1", "2608.20319v1", "2608.20320v1", "2608.20331v1")
+
+
 @unittest.skipUnless(list((REPO / "data").glob("*.pdf")), "no PDFs in data/")
 class CorpusTest(unittest.TestCase):
+    """Runs on the 5 seeded papers that are committed to the repo, not on every PDF in data/,
+    so it stays fast and gives the same result after a 50-paper pull."""
+
+    @classmethod
+    def setUpClass(cls):
+        import shutil
+
+        cls.tmp = tempfile.TemporaryDirectory()
+        src = Path(cls.tmp.name) / "in"
+        src.mkdir()
+        for arxiv_id in SEEDED:
+            for pdf in (REPO / "data").glob(f"{arxiv_id}_*.pdf"):
+                shutil.copy(pdf, src / pdf.name)
+        cls.n_pdfs = len(list(src.glob("*.pdf")))
+        cls.reports = pc.run(src, Path(cls.tmp.name) / "out", max_words=120, overlap_words=20, dedup_threshold=0.85)
+        cls.chunks = (Path(cls.tmp.name) / "out" / "chunks.jsonl").read_text().splitlines()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
     def test_runs_on_seeded_papers(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            reports = pc.run(REPO / "data", Path(tmp), max_words=120, overlap_words=20, dedup_threshold=0.85)
-            chunks = (Path(tmp) / "chunks.jsonl").read_text().splitlines()
-        self.assertEqual(len(reports), len(list((REPO / "data").glob("*.pdf"))))
-        self.assertTrue(all(r.chunks > 0 for r in reports))
-        # The 5 seeded papers all have a References heading. Newly pulled papers may not
-        # (the parser warns and keeps their text), so only the seeded ones are checked here.
-        seeded = {"2608.20316v1", "2608.20318v1", "2608.20319v1", "2608.20320v1", "2608.20331v1"}
-        self.assertTrue(all(r.references_removed for r in reports if r.arxiv_id in seeded))
-        self.assertEqual(len(chunks), sum(r.chunks for r in reports))
+        self.assertEqual(self.n_pdfs, len(SEEDED))
+        self.assertEqual(len(self.reports), len(SEEDED))
+        self.assertTrue(all(r.chunks > 0 for r in self.reports))
+        # The 5 seeded papers all have a References heading.
+        self.assertTrue(all(r.references_removed for r in self.reports))
+        self.assertEqual(len(self.chunks), sum(r.chunks for r in self.reports))
+
+    def test_gcarl_spacing_is_repaired_by_the_fallback(self):
+        # pypdf drops the word spacing on several G-CARL pages. Before the fallback only 25 of
+        # its chunks survived and the paper was flagged; with pypdfium2 it parses cleanly.
+        try:
+            import pypdfium2  # noqa: F401
+        except ImportError:
+            self.skipTest("pypdfium2 not installed")
+        gcarl = next(r for r in self.reports if r.arxiv_id == "2608.20331v1")
+        self.assertGreater(gcarl.pages_from_fallback, 0)
+        self.assertEqual(gcarl.status, "ok")
+        self.assertGreater(gcarl.chunks, 40)
+
+    def test_fallback_text_has_no_soft_hyphen_marks_or_split_words(self):
+        # pdfium writes words split across lines as "learn\ufffeing" on one line. Real output,
+        # not a hand-built string: these words come from G-CARL's fallback pages.
+        try:
+            import pypdfium2  # noqa: F401
+        except ImportError:
+            self.skipTest("pypdfium2 not installed")
+        gcarl = " ".join(json.loads(c)["text"] for c in self.chunks if json.loads(c)["arxiv_id"] == "2608.20331v1")
+        self.assertNotIn("\ufffe", gcarl)
+        for split in ("learn-ing", "fac-tuality", "ex-isting", "cap-ture", "intro-duce"):
+            self.assertNotIn(split, gcarl)
+        self.assertIn("factuality", gcarl)
+
+
+class ExtractionFallbackTest(unittest.TestCase):
+    """pypdf stays primary; pypdfium2 only replaces pages where pypdf lost the word spacing."""
+
+    GOOD = "This page came out of pypdf with normal spacing between all of its words."
+    GLUED = "Thispagecameoutofpypdfwithnospacingbetweenanyofitswordsatall andsomemoreglued textherewithoutspaces"
+    FIXED = "This page came out of pdfium with the spacing restored between all of its words."
+
+    def _run(self, pypdf_pages, pdfium_pages):
+        class FakePage:
+            def __init__(self, text):
+                self.text = text
+
+            def extract_text(self):
+                return self.text
+
+        class FakeReader:
+            def __init__(self, _path):
+                self.pages = [FakePage(t) for t in pypdf_pages]
+
+        orig_reader, orig_pdfium = pc.PdfReader, pc._pdfium_pages
+        pc.PdfReader, pc._pdfium_pages = FakeReader, lambda _path: pdfium_pages
+        try:
+            return pc.extract_pages(Path("fake.pdf"))
+        finally:
+            pc.PdfReader, pc._pdfium_pages = orig_reader, orig_pdfium
+
+    def test_clean_pages_never_touch_the_fallback(self):
+        pages, replaced = self._run([self.GOOD, self.GOOD], None)
+        self.assertEqual((pages, replaced), ([self.GOOD, self.GOOD], 0))
+
+    def test_only_the_garbled_page_is_replaced(self):
+        pages, replaced = self._run([self.GOOD, self.GLUED], [self.GOOD + " (pdfium copy)", self.FIXED])
+        self.assertEqual(pages, [self.GOOD, self.FIXED])
+        self.assertEqual(replaced, 1)
+
+    def test_fallback_that_is_also_garbled_is_not_used(self):
+        pages, replaced = self._run([self.GLUED], [self.GLUED])
+        self.assertEqual((pages, replaced), ([self.GLUED], 0))
+
+    def test_missing_pdfium_or_page_count_mismatch_keeps_pypdf(self):
+        self.assertEqual(self._run([self.GLUED], None), ([self.GLUED], 0))
+        self.assertEqual(self._run([self.GLUED], [self.FIXED, self.FIXED]), ([self.GLUED], 0))
+
 
 
 if __name__ == "__main__":

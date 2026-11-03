@@ -8,14 +8,16 @@ Writes two files to the output folder:
     parse_report.csv  one row per paper, so parse problems show up in one place
 
 Cleaning steps, in order:
-    1. extract text per page with pypdf
+    1. extract text per page with pypdf, falling back to pypdfium2 on pages where
+       pypdf loses the spaces between words (some LaTeX font encodings do this)
     2. drop running headers/footers, page numbers and the arXiv side stamp
     3. cut acknowledgments and the reference list, keep appendices
     4. split into sentences and pack them into chunks with sentence overlap
-    5. drop chunks where pypdf lost the spaces between words (usually figure text)
+    5. drop chunks that still have no spaces between words (usually figure text)
     6. drop exact and near-duplicate chunks (MinHash + LSH, verified with Jaccard)
 
-Only needs pypdf.
+Needs pypdf. pypdfium2 is optional: without it, garbled pages are kept as pypdf
+returns them and the garbled-chunk filter in step 5 drops them, as before.
 """
 
 from __future__ import annotations
@@ -84,15 +86,57 @@ class PaperReport:
     chunks: int = 0
     dropped_garbled: int = 0
     dropped_duplicates: int = 0
+    pages_from_fallback: int = 0  # pages where pypdf lost word spacing and pypdfium2 was used
     status: str = "ok"
 
 
 # ---------------------------------------------------------------- extraction
 
 
-def extract_pages(pdf_path: Path) -> list[str]:
+def _pdfium_pages(pdf_path: Path) -> list[str] | None:
+    """Page texts from pypdfium2, or None when it is not installed or cannot open the file."""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        return None
+    try:
+        doc = pdfium.PdfDocument(str(pdf_path))
+    except Exception:  # pdfium raises its own error types; any failure means no fallback
+        return None
+    try:
+        pages = []
+        for i in range(len(doc)):
+            text = doc[i].get_textpage().get_text_range()
+            # pdfium replaces a word split across lines ("learn-" / "ing") with
+            # "learn\ufffeing" on one line. U+FFFE is a soft-hyphen mark, so dropping it
+            # rejoins the word. Lines end with CRLF; normalize to what pypdf emits.
+            pages.append(text.replace("\ufffe", "").replace("\r\n", "\n").replace("\r", "\n"))
+        return pages
+    finally:
+        doc.close()
+
+
+def extract_pages(pdf_path: Path) -> tuple[list[str], int]:
+    """Text per page, plus how many pages came from the pypdfium2 fallback.
+
+    pypdf is the primary extractor. On some papers it drops the spaces between
+    words for whole pages ("ableforthesamereport..."). Those pages are taken from
+    pypdfium2 instead, which reads the same PDFs with correct spacing.
+    """
     reader = PdfReader(pdf_path)
-    return [page.extract_text() or "" for page in reader.pages]
+    pages = [page.extract_text() or "" for page in reader.pages]
+    bad = [i for i, text in enumerate(pages) if text.strip() and is_garbled(text)]
+    if not bad:
+        return pages, 0
+    fallback = _pdfium_pages(pdf_path)
+    if fallback is None or len(fallback) != len(pages):
+        return pages, 0
+    replaced = 0
+    for i in bad:
+        if fallback[i].strip() and not is_garbled(fallback[i]):
+            pages[i] = fallback[i]
+            replaced += 1
+    return pages, replaced
 
 
 def _line_key(line: str) -> str:
@@ -341,7 +385,7 @@ def process_paper(
     report = PaperReport(arxiv_id=arxiv_id, source_file=pdf_path.name)
 
     try:
-        pages = extract_pages(pdf_path)
+        pages, report.pages_from_fallback = extract_pages(pdf_path)
     except (PdfReadError, OSError, ValueError) as exc:  # corrupt or encrypted PDF: record it, keep going
         report.status = f"extract_failed: {exc.__class__.__name__}"
         return [], report
