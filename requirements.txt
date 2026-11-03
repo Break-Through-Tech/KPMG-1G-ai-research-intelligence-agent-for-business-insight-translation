@@ -8,9 +8,10 @@ pypdf>=5.0.0
 sentence-transformers>=3.0.0
 chromadb>=0.5.0
 
-# Orchestration, for the generation step after the retrieval baseline
+# Orchestration and generation (src/summarize.py)
 langchain>=0.3.0
 langchain-community>=0.3.0
+langchain-google-genai>=4.0.0
 
 # arXiv corpus pull (Issue #2) and data handling
 arxiv>=2.1.0
