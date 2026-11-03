@@ -1,0 +1,52 @@
+# Reference queries for the hub correction in src/build_index.py.
+# These are the 46 sample prompts from the Challenge Advisor's
+# Personas_Prompts/Break_Through_Tech_2026_Sample_User_Prompts.docx, one per line.
+# They stand in for what real users ask. They are NOT the benchmark: keep the
+# benchmark questions out of this file, or the eval will overstate the gain.
+# Lines starting with # are ignored.
+What are the most relevant recent research papers on reducing hallucinations in retrieval-augmented generation? Summarize the main approaches and identify where the evidence is strongest.
+Give me a practical overview of current research on agentic AI systems. Group the papers by planning, tool use, memory, evaluation, and safety.
+What new techniques are researchers using to improve retrieval quality when source documents are long, technical, or poorly formatted?
+Find research comparing Graph RAG with traditional vector-based RAG. Explain when each approach appears most useful.
+What does the research say about using smaller language models for enterprise applications? Focus on performance, cost, privacy, and deployment trade-offs.
+Identify influential papers on multimodal RAG and explain the business problems these methods could help solve.
+I am preparing for a client conversation about adopting generative AI. What research should I read to understand the major reliability and governance risks?
+Summarize research on AI agents in financial services. Separate demonstrated use cases from experimental or speculative use cases.
+A client wants to use RAG over internal policies and procedures. What research findings should shape the solution design and testing approach?
+What does recent research suggest about the risks and benefits of synthetic data for training and testing AI systems? Translate the findings into client discussion points.
+Prepare a research brief for a partner meeting on how generative AI may change knowledge-intensive professional services.
+A client is considering an enterprise AI assistant. Find research relevant to user trust, adoption, overreliance, and human oversight.
+What does the research say about effective methods for evaluating hallucinations in RAG systems? Compare the metrics and their limitations.
+Find papers on prompt injection and indirect prompt injection in RAG or agentic systems. Summarize the attack patterns and proposed mitigations.
+What research exists on measuring bias in large language model outputs across different user groups or business contexts?
+Summarize research on explainability for large language models. Which techniques appear useful for business users, developers, and risk reviewers?
+What evidence exists that human review improves the safety or accuracy of generative AI outputs? Note the conditions where oversight may fail.
+Identify research on privacy leakage, memorization, or data extraction from language models. Explain the implications for enterprise deployment.
+Find research on evaluating autonomous or semi-autonomous AI agents. What failure modes should an organization test before deployment?
+What does research suggest about monitoring AI systems after deployment? Provide a practical set of monitoring categories supported by the literature.
+Compare common document chunking strategies for RAG. What does the research suggest about chunk size, overlap, semantic chunking, and document structure?
+What research compares dense, sparse, and hybrid retrieval? Recommend evaluation questions for choosing among them.
+Summarize evidence on reranking methods in RAG pipelines. When does a reranker materially improve results?
+What research is available on query rewriting, query decomposition, and multi-step retrieval? Explain the trade-offs for enterprise use.
+Find studies on evaluating whether retrieved context actually supports a model’s answer. Summarize useful groundedness or faithfulness methods.
+What approaches are being studied for handling tables, charts, scanned PDFs, and complex layouts in RAG systems?
+Compare research on fine-tuning, prompt engineering, and RAG for adapting an LLM to a specialized business domain.
+What does the literature say about latency and cost optimization for production RAG systems without materially reducing answer quality?
+Translate the latest research on AI agents into five implications for enterprise operating models. Distinguish near-term implications from longer-term possibilities.
+Which emerging AI research areas could materially affect audit, tax, advisory, or other professional services? Explain the potential impact and maturity of each area.
+Summarize this research area for a nontechnical executive. Focus on what has changed, why it matters, and what decisions leaders may need to make.
+Based on the research, what capabilities would an organization need to move this technique from a prototype into a controlled enterprise solution?
+What research findings could challenge common assumptions about using generative AI at work? Provide the evidence and implications.
+Identify three promising research developments that are not yet mature enough for broad enterprise adoption. Explain what evidence is still missing.
+Find papers that reach different conclusions about the effectiveness of RAG. Explain why the findings may differ, including data, tasks, metrics, or model choices.
+What are the strongest counterarguments to the claim that larger language models are always better for enterprise use? Support each point with research.
+Compare two leading approaches to evaluating agent performance. Which business risks does each approach capture or miss?
+Identify the most important limitations across the papers you retrieved. Do not treat repeated claims as independent evidence if they rely on the same benchmark or dataset.
+What conclusions can we confidently draw from the research on this topic, and which conclusions remain uncertain?
+Show me the evidence trail behind your answer: the papers used, the specific finding drawn from each, and any conflicting or missing evidence.
+Now shorten that into five bullets suitable for an executive slide. Preserve the caveats.
+Turn the findings into a table with columns for research finding, business implication, risk, and recommended next question.
+Which of these findings are supported by multiple independent papers, and which rely on only one source?
+What would a skeptical risk leader challenge in this analysis?
+Create three questions I should ask a technical team before relying on this approach in a client solution.
+Revise the answer for a business audience that understands AI concepts but does not want implementation detail.

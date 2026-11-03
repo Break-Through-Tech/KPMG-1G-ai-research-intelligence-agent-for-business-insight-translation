@@ -3,10 +3,12 @@
     python src/evaluate_retrieval.py --benchmark data/benchmark/questions.jsonl
     python src/evaluate_retrieval.py --benchmark data/benchmark/smoke_questions.jsonl
     python src/plot_eval.py                                  # -> docs/figures/
+    python src/plot_eval.py --baseline-dir data/processed/eval_baseline   # also draws before_after.png
 
-Two charts:
+Charts:
     retrieval_scores.png      Recall@k and MRR for the benchmark, next to the smoke set if it was run
     first_correct_rank.png    for each benchmark question, where the first relevant paper ranked
+    before_after.png          benchmark scores of a baseline eval run next to the current one (--baseline-dir)
 
 Rerun after any change to chunking, embeddings or the corpus so the figures match the README.
 """
@@ -26,6 +28,7 @@ TEXT_MUTED = "#52514e"
 GRID = "#e4e3df"
 BENCHMARK_COLOR = "#2a78d6"
 SMOKE_COLOR = "#eb6834"
+BASELINE_COLOR = "#a9a8a3"
 
 
 def rank_bucket(rr: float) -> str:
@@ -61,13 +64,25 @@ def style_axes(ax) -> None:
 
 
 def plot_scores(benchmark: dict, smoke: dict | None, path: Path) -> None:
-    import matplotlib.pyplot as plt
-
-    names = metric_names(benchmark)
-    labels = ["MRR" if n == "mrr" else n.replace("recall", "Recall") for n in names]
     series = [(f"Benchmark ({benchmark['questions']} questions)", benchmark, BENCHMARK_COLOR)]
     if smoke:
         series.append((f"Smoke test ({smoke['questions']} questions)", smoke, SMOKE_COLOR))
+    footer = f"Run {benchmark['run_at'][:10]}, top {benchmark['pool']} chunks collapsed to papers."
+    plot_bars(series, "Retrieval scores", footer, path)
+
+
+def plot_before_after(baseline: dict, current: dict, path: Path) -> None:
+    series = [("Baseline", baseline, BASELINE_COLOR), ("Current", current, BENCHMARK_COLOR)]
+    footer = (f"{current['questions']} benchmark questions. Baseline run {baseline['run_at'][:10]}, "
+              f"current run {current['run_at'][:10]}.")
+    plot_bars(series, "Retrieval scores before and after", footer, path)
+
+
+def plot_bars(series: list[tuple[str, dict, str]], title: str, footer: str, path: Path) -> None:
+    import matplotlib.pyplot as plt
+
+    names = metric_names(series[0][1])
+    labels = ["MRR" if n == "mrr" else n.replace("recall", "Recall") for n in names]
 
     fig, ax = plt.subplots(figsize=(10, 5.6), dpi=200)
     fig.patch.set_facecolor(SURFACE)
@@ -86,9 +101,8 @@ def plot_scores(benchmark: dict, smoke: dict | None, path: Path) -> None:
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
     fig.legend(loc="upper left", frameon=False, fontsize=11, labelcolor=TEXT_MUTED,
                ncol=len(series), bbox_to_anchor=(0.05, 0.9), handlelength=1.2)
-    fig.suptitle("Retrieval scores", x=0.06, ha="left", y=0.97, fontsize=17, color=TEXT, fontweight="bold")
-    fig.text(0.06, 0.02, f"Run {benchmark['run_at'][:10]}, top {benchmark['pool']} chunks collapsed to papers.",
-             fontsize=9.5, color=TEXT_MUTED)
+    fig.suptitle(title, x=0.06, ha="left", y=0.97, fontsize=17, color=TEXT, fontweight="bold")
+    fig.text(0.06, 0.02, footer, fontsize=9.5, color=TEXT_MUTED)
     plt.subplots_adjust(top=0.8, bottom=0.12, left=0.06, right=0.98)
     fig.savefig(path, facecolor=SURFACE)
     plt.close(fig)
@@ -125,6 +139,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--benchmark", default="questions", help="file stem of the benchmark results")
     parser.add_argument("--smoke", default="smoke_questions", help="file stem of the smoke results; skipped if missing")
     parser.add_argument("--out", type=Path, default=Path("docs/figures"))
+    parser.add_argument("--baseline-dir", type=Path, default=None, help="eval dir of a baseline run, for before_after.png")
     args = parser.parse_args(argv)
 
     summary_path = args.eval_dir / f"{args.benchmark}_summary.json"
@@ -140,6 +155,13 @@ def main(argv: list[str] | None = None) -> None:
     plot_scores(benchmark, smoke, args.out / "retrieval_scores.png")
     plot_ranks(rows, args.out / "first_correct_rank.png")
     print(f"Wrote {args.out / 'retrieval_scores.png'} and {args.out / 'first_correct_rank.png'}")
+    if args.baseline_dir:
+        baseline_path = args.baseline_dir / f"{args.benchmark}_summary.json"
+        if not baseline_path.exists():
+            raise SystemExit(f"{baseline_path} not found.")
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        plot_before_after(baseline, benchmark, args.out / "before_after.png")
+        print(f"Wrote {args.out / 'before_after.png'}")
 
 
 if __name__ == "__main__":

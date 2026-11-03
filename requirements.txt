@@ -3,6 +3,8 @@
 
 # PDF parsing (src/parse_and_chunk.py)
 pypdf>=5.0.0
+# Fallback for pages where pypdf loses the spaces between words (optional but recommended)
+pypdfium2>=4.30.0
 
 # Embeddings and vector store (src/build_index.py, src/evaluate_retrieval.py)
 sentence-transformers>=3.0.0
