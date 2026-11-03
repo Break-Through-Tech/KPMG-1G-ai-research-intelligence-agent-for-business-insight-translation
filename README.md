@@ -118,6 +118,7 @@ Shared Drive folder: [KPMG 1G — AI Studio Fall 2026](https://drive.google.com/
 python src/parse_and_chunk.py                  # data/*.pdf -> data/processed/chunks.jsonl
 python src/build_index.py                      # -> chroma_db/ (first run downloads the embedding model)
 python src/retrieve.py "your question" -k 5    # try a query
+python src/summarize.py "your question" -k 5   # cited answer (needs GOOGLE_API_KEY in .env)
 python src/evaluate_retrieval.py --benchmark data/benchmark/smoke_questions.jsonl
 python -m unittest discover -s tests -v
 ```
