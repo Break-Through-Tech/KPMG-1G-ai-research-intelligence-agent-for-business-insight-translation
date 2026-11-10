@@ -53,7 +53,7 @@ class BackMatterTest(unittest.TestCase):
 
     def test_cuts_references_and_keeps_appendix(self):
         pages = self.make(
-            ["Conclusion text.", "References", "[1] Smith. 2024.", "A Proof of Theorem 1", "Appendix text."]
+            ["Conclusion text.", "References", "[1] Smith. 2024.", "[2] Lee. 2023.", "A Proof of Theorem 1", "Appendix text."]
         )
         lines, refs, appendix = pc.remove_back_matter(pages)
         text = [ln for _, _, ln in lines]
@@ -63,13 +63,13 @@ class BackMatterTest(unittest.TestCase):
         self.assertEqual([s for _, s, ln in lines if ln == "Appendix text."], ["appendix"])
 
     def test_cuts_acknowledgments_before_references(self):
-        pages = self.make(["Last result.", "Acknowledgments", "Funded by a grant.", "References", "[1] Doe."])
+        pages = self.make(["Last result.", "Acknowledgments", "Funded by a grant.", "References", "[1] Doe. 2022.", "[2] Roe. 2024."])
         text = [ln for _, _, ln in pc.remove_back_matter(pages)[0]]
         self.assertIn("Last result.", text)
         self.assertNotIn("Funded by a grant.", text)
 
     def test_citation_after_references_is_not_an_appendix(self):
-        pages = self.make(["Conclusion text.", "References", "A. Smith and Jones", "Some venue."])
+        pages = self.make(["Conclusion text.", "References", "A. Smith and Jones", "Some venue, 2024.", "B. Lee. Other venue, 2023."])
         lines, refs, appendix = pc.remove_back_matter(pages)
         self.assertTrue(refs)
         self.assertFalse(appendix)
@@ -80,6 +80,24 @@ class BackMatterTest(unittest.TestCase):
             self.assertTrue(pc.is_appendix_heading(line), line)
         for line in ["A. Smith and Jones", "A. Vaswani, N. Shazeer", "A Smith et al"]:
             self.assertFalse(pc.is_appendix_heading(line), line)
+
+    def test_toc_entry_without_citations_is_not_the_reference_list(self):
+        toc = [["Title", "Abstract text."], ["Contents", "1 Introduction", "References", "A Proofs"]]
+        body = [[f"Body line {i}" for i in range(10)]]
+        refs = [["References", "[1] Smith. 2024.", "[2] Lee. 2023."]]
+        lines, found, _ = pc.remove_back_matter(toc + body + refs)
+        text = [ln for _, _, ln in lines]
+        self.assertTrue(found)
+        self.assertIn("Body line 9", text)
+        self.assertNotIn("[1] Smith. 2024.", text)
+
+    def test_references_early_in_a_paper_with_a_long_appendix_are_found(self):
+        # 2610.35715v1: references end on page 10 of 69, at 8% of the lines.
+        pages = [["Title"], ["Body."], ["References", "[1] Smith. 2024.", "[2] Lee. 2023."], ["A Proofs"]]
+        pages += [[f"Appendix line {i}" for i in range(40)] for _ in range(10)]
+        lines, found, appendix = pc.remove_back_matter(pages)
+        self.assertTrue(found and appendix)
+        self.assertNotIn("[1] Smith. 2024.", [ln for _, _, ln in lines])
 
     def test_no_references_heading_keeps_everything(self):
         pages = self.make(["Just text."])
@@ -180,38 +198,56 @@ class CorpusTest(unittest.TestCase):
         self.assertTrue(all(r.references_removed for r in self.reports))
         self.assertEqual(len(self.chunks), sum(r.chunks for r in self.reports))
 
-    def test_gcarl_spacing_is_repaired_by_the_fallback(self):
-        # pypdf drops the word spacing on several G-CARL pages. Before the fallback only 25 of
-        # its chunks survived and the paper was flagged; with pypdfium2 it parses cleanly.
-        try:
-            import pypdfium2  # noqa: F401
-        except ImportError:
-            self.skipTest("pypdfium2 not installed")
-        gcarl = next(r for r in self.reports if r.arxiv_id == "2608.20331v1")
-        self.assertGreater(gcarl.pages_from_fallback, 0)
-        self.assertEqual(gcarl.status, "ok")
-        self.assertGreater(gcarl.chunks, 40)
+    def _text(self, arxiv_id: str) -> str:
+        return " ".join(json.loads(c)["text"] for c in self.chunks if json.loads(c)["arxiv_id"] == arxiv_id)
 
-    def test_fallback_text_has_no_soft_hyphen_marks_or_split_words(self):
-        # pdfium writes words split across lines as "learn\ufffeing" on one line. Real output,
-        # not a hand-built string: these words come from G-CARL's fallback pages.
+    def _needs_pdfium(self):
         try:
             import pypdfium2  # noqa: F401
         except ImportError:
             self.skipTest("pypdfium2 not installed")
-        gcarl = " ".join(json.loads(c)["text"] for c in self.chunks if json.loads(c)["arxiv_id"] == "2608.20331v1")
+
+    def test_gcarl_parses_cleanly(self):
+        # pypdf drops the word spacing on 5 G-CARL pages. With pypdf only 25 of its chunks
+        # survived; with pypdf + page fallback 49; with pypdfium2 as the primary extractor
+        # no chunk is lost to garbling and the abstract is kept.
+        self._needs_pdfium()
+        gcarl = next(r for r in self.reports if r.arxiv_id == "2608.20331v1")
+        self.assertEqual(gcarl.extractor, "pypdfium2")
+        self.assertEqual(gcarl.status, "ok")
+        self.assertEqual(gcarl.dropped_garbled, 0)
+        self.assertGreater(gcarl.chunks, 50)
+        self.assertIn("Addressing this need requires both evidence-grounded medical factuality", self._text("2608.20331v1"))
+
+    def test_words_pypdf_joined_on_normal_pages_are_separate(self):
+        # pypdf output for AI4AI-Bench p3 and p12, which is_garbled() does not flag.
+        self._needs_pdfium()
+        text = self._text("2608.20318v1")
+        for joined in ("agentsdo", "Evenautoresearch", "win.Every"):
+            self.assertNotIn(joined, text)
+        self.assertIn("Even autoresearch", text)
+        self.assertIn("what agents do", text)
+
+    def test_line_hyphens_split_words_and_keep_compounds(self):
+        # pdfium writes words split across lines as "learn\ufffeing" on one line. Real output,
+        # not a hand-built string: these come from G-CARL and Pandora's Box.
+        self._needs_pdfium()
+        gcarl = self._text("2608.20331v1")
         self.assertNotIn("\ufffe", gcarl)
         for split in ("learn-ing", "fac-tuality", "ex-isting", "cap-ture", "intro-duce"):
             self.assertNotIn(split, gcarl)
         self.assertIn("factuality", gcarl)
+        self.assertIn("a real-world PMRI benchmark", gcarl)
+        self.assertIn("a retrieval-augmented specialist", self._text("2608.20316v1"))
 
 
 class ExtractionFallbackTest(unittest.TestCase):
-    """pypdf stays primary; pypdfium2 only replaces pages where pypdf lost the word spacing."""
+    """pypdfium2 is primary; pypdf is used for the whole file without pypdfium2, and for
+    single pages where pypdfium2 returns nothing usable."""
 
-    GOOD = "This page came out of pypdf with normal spacing between all of its words."
-    GLUED = "Thispagecameoutofpypdfwithnospacingbetweenanyofitswordsatall andsomemoreglued textherewithoutspaces"
-    FIXED = "This page came out of pdfium with the spacing restored between all of its words."
+    GOOD = "This page came out of pdfium with normal spacing between all of its words."
+    GLUED = "Thispagecameoutofpdfiumwithnospacingbetweenanyofitswordsatall andsomemoreglued textherewithoutspaces"
+    PYPDF = "This page came out of pypdf with the spacing intact between all of its words."
 
     def _run(self, pypdf_pages, pdfium_pages):
         class FakePage:
@@ -232,22 +268,50 @@ class ExtractionFallbackTest(unittest.TestCase):
         finally:
             pc.PdfReader, pc._pdfium_pages = orig_reader, orig_pdfium
 
-    def test_clean_pages_never_touch_the_fallback(self):
-        pages, replaced = self._run([self.GOOD, self.GOOD], None)
-        self.assertEqual((pages, replaced), ([self.GOOD, self.GOOD], 0))
+    def test_pdfium_is_used_when_its_pages_are_fine(self):
+        pages, replaced, extractor = self._run([self.PYPDF, self.PYPDF], [self.GOOD, self.GOOD])
+        self.assertEqual((pages, replaced, extractor), ([self.GOOD, self.GOOD], 0, "pypdfium2"))
 
-    def test_only_the_garbled_page_is_replaced(self):
-        pages, replaced = self._run([self.GOOD, self.GLUED], [self.GOOD + " (pdfium copy)", self.FIXED])
-        self.assertEqual(pages, [self.GOOD, self.FIXED])
-        self.assertEqual(replaced, 1)
+    def test_only_the_weak_pdfium_page_is_replaced(self):
+        pages, replaced, _ = self._run([self.PYPDF, self.PYPDF], [self.GOOD, self.GLUED])
+        self.assertEqual((pages, replaced), ([self.GOOD, self.PYPDF], 1))
+        pages, replaced, _ = self._run([self.PYPDF, self.PYPDF], [self.GOOD, "  \n"])
+        self.assertEqual((pages, replaced), ([self.GOOD, self.PYPDF], 1))
 
-    def test_fallback_that_is_also_garbled_is_not_used(self):
-        pages, replaced = self._run([self.GLUED], [self.GLUED])
-        self.assertEqual((pages, replaced), ([self.GLUED], 0))
+    def test_pypdf_page_that_is_also_garbled_is_not_used(self):
+        self.assertEqual(self._run([self.GLUED], [self.GLUED]), ([self.GLUED], 0, "pypdfium2"))
 
-    def test_missing_pdfium_or_page_count_mismatch_keeps_pypdf(self):
-        self.assertEqual(self._run([self.GLUED], None), ([self.GLUED], 0))
-        self.assertEqual(self._run([self.GLUED], [self.FIXED, self.FIXED]), ([self.GLUED], 0))
+    def test_missing_pdfium_uses_pypdf_for_the_whole_file(self):
+        self.assertEqual(self._run([self.PYPDF, self.GLUED], None), ([self.PYPDF, self.GLUED], 0, "pypdf"))
+
+    def test_page_count_mismatch_keeps_pdfium(self):
+        self.assertEqual(self._run([self.PYPDF], [self.GOOD, self.GLUED]), ([self.GOOD, self.GLUED], 0, "pypdfium2"))
+
+
+class LineHyphenTest(unittest.TestCase):
+    """pdfium marks a hyphen at a line break as U+FFFE; the paper's own words decide."""
+
+    def resolve(self, text: str, context: str = "") -> str:
+        return pc.resolve_line_hyphens([text, context])[0]
+
+    def test_split_word_is_joined(self):
+        self.assertEqual(self.resolve("we use fac\ufffetuality here"), "we use factuality here")
+
+    def test_joined_form_seen_elsewhere_is_joined(self):
+        self.assertEqual(self.resolve("deep learn\ufffeing", "learning is used"), "deep learning")
+
+    def test_hyphenated_form_seen_elsewhere_keeps_hyphen(self):
+        self.assertEqual(self.resolve("in real\ufffeworld use", "real-world data"), "in real-world use")
+
+    def test_both_halves_seen_as_words_keep_hyphen(self):
+        self.assertEqual(self.resolve("for decision\ufffemakers", "a decision by the makers"), "for decision-makers")
+
+    def test_capital_second_half_keeps_hyphen(self):
+        self.assertEqual(self.resolve("Megatron\ufffeLM partitions"), "Megatron-LM partitions")
+
+    def test_mark_before_a_digit_is_dropped(self):
+        # A footnote number interrupted "trav-eler"; no rule applies, the mark just goes.
+        self.assertEqual(self.resolve("trav\ufffe2 eler"), "trav2 eler")
 
 
 

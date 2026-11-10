@@ -2,9 +2,9 @@
 # Install with: pip install -r requirements.txt
 
 # PDF parsing (src/parse_and_chunk.py)
-pypdf>=5.0.0
-# Fallback for pages where pypdf loses the spaces between words (optional but recommended)
+# pypdfium2 is the primary extractor; pypdf joins some words ("agentsdo") and is the fallback
 pypdfium2>=4.30.0
+pypdf>=5.0.0
 
 # Embeddings and vector store (src/build_index.py, src/evaluate_retrieval.py)
 sentence-transformers>=3.0.0

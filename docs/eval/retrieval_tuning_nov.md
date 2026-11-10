@@ -13,7 +13,10 @@ baseline (`all-MiniLM-L6-v2`).
 | | Recall@1 | Recall@3 | Recall@5 | MRR |
 |---|---|---|---|---|
 | Oct 27 baseline | 0.542 | 0.814 | 0.846 | 0.761 |
-| Now | 0.696 | 0.853 | 0.904 | 0.854 |
+| Nov 3 (Issue #15) | 0.696 | 0.853 | 0.904 | 0.854 |
+| Nov 10 (same retrieval, fixed parser) | 0.657 | 0.875 | 0.904 | 0.835 |
+
+The Nov 10 row is explained in "Parser change, Nov 10" at the end of this file.
 
 Relevant papers that actually reach the LLM in the passages it is given:
 
@@ -256,6 +259,52 @@ If the team agrees, the clean way to apply them is a `questions_v2.jsonl` with a
 | Business wording vs technical text (q08 and q20 still rank the right paper 2nd) | a near-miss paper ranks first | query rewriting: have the LLM turn the question into technical search terms before retrieval. Needs a key to test. |
 | Some reference lists survive parsing (EvoRouter, 2610.35690v1, pages 9 to 10 are kept as "appendix") | citation-only chunks show up in results | tighten `remove_back_matter()` in `parse_and_chunk.py`; not part of this change |
 | 26 questions is a small benchmark | differences under ~0.03 MRR are noise | grow it with the questions from user testing (Issue #17) |
+
+## Parser change, Nov 10
+
+The answer page showed passages with words run together ("agentsdo", "Evenautoresearch"). They came
+from pypdf, which drops the space between some words on ordinary pages. The Nov 3 fallback only
+caught whole garbled pages, so these passed through to the index, the UI and the LLM.
+
+What changed in `parse_and_chunk.py`:
+
+1. pypdfium2 is the primary extractor; pypdf is used only when pypdfium2 is missing or returns an
+   empty or garbled page (0 pages on this corpus).
+2. Line-break hyphens are decided per paper: "learn-ing" becomes "learning", "real-world" keeps its
+   hyphen. Before, both extractors joined every one ("realworld" appeared 6 times in the index).
+3. The reference list is found by a "References" heading followed by a year within 8 lines,
+   instead of only searching after the first 30% of lines. Long appendices put the real heading
+   as early as 8% (2610.35715v1). 5 papers' bibliographies were being indexed; now 0 of 50.
+
+Effect on the parsed corpus:
+
+| | Oct 27 / Nov 3 parser | Nov 10 parser |
+|---|---|---|
+| Chunks | 5,940 | 6,379 |
+| Chunks dropped as garbled | 116 | 47 |
+| Papers with references not found | 5 | 0 |
+| Words an English word list flags as two joined words (per 10k) | 72.2 | 40.0 |
+
+Most of the remaining flags are real names (DeepSeek, HybridAgent, OpenCode), not parse errors.
+
+Effect on retrieval (same hub-corrected setup as Nov 3, rebuilt index):
+
+| | R@1 | R@3 | R@5 | MRR | MRR odd / even |
+|---|---|---|---|---|---|
+| Nov 3 parser | 0.696 | 0.853 | 0.904 | 0.854 | 0.923 / 0.785 |
+| Nov 10 extractor only | 0.657 | 0.875 | 0.904 | 0.835 | 0.923 / 0.746 |
+| Nov 10 extractor + references | 0.657 | 0.875 | 0.904 | 0.835 | 0.923 / 0.746 |
+
+- Two questions drop from rank 1 to 2 (q06 by 0.001 in score, q16 by 0.011), one rises from 2 to 1
+  (q20), and two multi-paper questions find another relevant paper in the top 3 (q21, q23).
+- The cause is chunk boundaries, not worse text: recovered words shift where every later chunk in
+  a paper starts. q06's best chunk is the same paragraph starting one sentence later.
+- The papers that reach the LLM do not change: single-paper 1.000, multi-paper 0.625.
+- The relevance floor catches 3 of 13 out-of-scope questions (was 2); the lowest in-scope
+  question is still above it (0.401).
+- By the rule used above (improve both halves, do not trade R@5 for R@1), this is not a retrieval
+  improvement. It is a text-correctness fix; the score change is inside the ~0.03 MRR noise band
+  and the reference-set sensitivity range (0.790 to 0.856).
 
 ## Reproduce
 
