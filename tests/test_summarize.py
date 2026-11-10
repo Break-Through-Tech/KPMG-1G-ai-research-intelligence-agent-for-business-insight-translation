@@ -60,6 +60,12 @@ class CitationTest(unittest.TestCase):
     def test_ignores_ids_and_numbers_outside_citations(self):
         self.assertEqual(sm.extract_citations("see 2608.20318, source [1], score [0.166]"), [])
 
+    def test_malformed_ids_are_not_truncated_into_valid_citations(self):
+        for token in ("2608.203160", "12608.20318", "2608.20318v1extra", "2608.20318v",
+                      "２６０８.２０３１８", "2608.20318.5"):
+            with self.subTest(token=token):
+                self.assertEqual(sm.extract_citations(f"Finding [arXiv:{token}]."), [])
+
 
 class PromptTest(unittest.TestCase):
     def test_sources_carry_id_title_and_pages(self):
@@ -96,6 +102,44 @@ class SummarizeTest(unittest.TestCase):
         answer = sm.summarize("q", search_returning([]), llm)
         self.assertEqual(llm.calls, [])
         self.assertIn("nothing to summarize", answer.text)
+
+    def test_codex_renders_citations_from_passages_in_one_call(self):
+        import json
+        hit = FakeHit("2608.20318v1", text="In simulation, success fell to 0.509 under severe rig perturbations.")
+        reply = {"coverage": "partial", "claims": [{
+            "text": "In simulation, severe perturbations reduced success to 0.509.",
+            "evidence": [{"source": "S1", "quote": hit.text}],
+        }]}
+        llm = FakeLLM(json.dumps(reply))
+        answer = sm.summarize("How reliable?", search_returning([hit]), llm, 10, prompt_version="codex_v1")
+        self.assertEqual(answer.cited_ids, [hit.arxiv_id])
+        self.assertEqual(answer.validation_errors, [])
+        self.assertEqual(answer.evidence[0]["evidence"][0]["arxiv_id"], hit.arxiv_id)
+        self.assertIn("only part of the question", answer.text)
+        self.assertEqual(len(llm.calls), 1)
+        self.assertIn("Passage S1 | arXiv ID:", llm.calls[0][1][1])
+
+    def test_unknown_prompt_rejected_before_search_or_model_call(self):
+        with self.assertRaises(ValueError):
+            sm.summarize("q", lambda *_: self.fail("search called"), FakeLLM(""), prompt_version="typo")
+
+    def test_supports_text_methods_and_content_blocks(self):
+        class MethodMessage:
+            def text(self):
+                return " method text "
+        class BlocksMessage:
+            content = [{"type": "reasoning", "text": "internal"}, {"type": "text", "text": "answer"}]
+        self.assertEqual(sm.response_text(MethodMessage()), "method text")
+        self.assertEqual(sm.response_text(BlocksMessage()), "answer")
+        self.assertEqual(sm.response_text(object()), "")
+
+    def test_callable_string_text_is_read_as_property(self):
+        class CallableText(str):
+            def __call__(self):
+                raise AssertionError("Deprecated callable text was invoked")
+        class Message:
+            text = CallableText(" reply ")
+        self.assertEqual(sm.response_text(Message()), "reply")
 
 
 if __name__ == "__main__":
