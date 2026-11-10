@@ -8,16 +8,19 @@ Writes two files to the output folder:
     parse_report.csv  one row per paper, so parse problems show up in one place
 
 Cleaning steps, in order:
-    1. extract text per page with pypdf, falling back to pypdfium2 on pages where
-       pypdf loses the spaces between words (some LaTeX font encodings do this)
+    1. extract text per page with pypdfium2, falling back to pypdf on pages where
+       pypdfium2 returns nothing usable, and rejoin words hyphenated across lines
+       (keeping the hyphen in compounds such as "real-world")
     2. drop running headers/footers, page numbers and the arXiv side stamp
     3. cut acknowledgments and the reference list, keep appendices
     4. split into sentences and pack them into chunks with sentence overlap
     5. drop chunks that still have no spaces between words (usually figure text)
     6. drop exact and near-duplicate chunks (MinHash + LSH, verified with Jaccard)
 
-Needs pypdf. pypdfium2 is optional: without it, garbled pages are kept as pypdf
-returns them and the garbled-chunk filter in step 5 drops them, as before.
+Needs pypdfium2 and pypdf. pypdf alone drops the space between some words on
+most pages ("agentsdo", "Evenautoresearch"), too sparsely for the garbled check
+to notice. If pypdfium2 is not installed the script still runs on pypdf and
+logs a warning, but expect those joined words in the chunks.
 """
 
 from __future__ import annotations
@@ -45,6 +48,7 @@ FILENAME_RE = re.compile(r"^(?P<arxiv_id>\d{4}\.\d{4,5}v\d+)_(?P<title>.+)$")
 ARXIV_STAMP_RE = re.compile(r"arXiv:\d{4}\.\d{4,5}v\d+\s+\[[\w.\-]+\]\s+\d{1,2}\s+\w{3}\s+\d{4}")
 PAGE_NUMBER_RE = re.compile(r"^\s*(page\s+)?\d{1,3}(\s+of\s+\d{1,3})?\s*$", re.IGNORECASE)
 REFERENCES_RE = re.compile(r"^\s*(\d{1,2}\.?\s+)?(references|bibliography)\s*$", re.IGNORECASE)
+YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 ACKNOWLEDGMENTS_RE = re.compile(r"^\s*(\d{1,2}\.?\s+)?acknowledge?ments?\s*$", re.IGNORECASE)
 # First appendix heading after the references: "Appendix ...", or a lettered heading
 # like "A Title", "A. Title" or "A Title 19" (TOC line). The lettered form is checked
@@ -56,6 +60,10 @@ CITATION_RE = re.compile(r",|\bet al\b")  # never in a heading
 DOTTED_NAME_RE = re.compile(r"\b[A-Z]\.\s|\band\b")  # "A. Smith and Jones", "A. B. Smith"
 SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(\[\"'])")
 WORD_RE = re.compile(r"[a-z0-9]+")
+# pdfium marks a hyphen at a line break as U+FFFE between the two halves: "learn\ufffeing".
+LINE_HYPHEN = "\ufffe"
+LINE_HYPHEN_RE = re.compile(r"([^\W\d_]+)\ufffe([^\W\d_][^\W_]*)")
+VOCAB_RE = re.compile(r"[^\W\d_]+(?:-[^\W\d_]+)*")
 
 LOW_QUALITY_SHARE = 0.25  # flag a paper when more than this share of its chunks came out garbled
 
@@ -86,7 +94,8 @@ class PaperReport:
     chunks: int = 0
     dropped_garbled: int = 0
     dropped_duplicates: int = 0
-    pages_from_fallback: int = 0  # pages where pypdf lost word spacing and pypdfium2 was used
+    extractor: str = "pypdfium2"  # "pypdf" when pypdfium2 is missing or cannot open the file
+    pages_from_fallback: int = 0  # pages taken from pypdf because pypdfium2 returned nothing usable
     status: str = "ok"
 
 
@@ -107,36 +116,74 @@ def _pdfium_pages(pdf_path: Path) -> list[str] | None:
         pages = []
         for i in range(len(doc)):
             text = doc[i].get_textpage().get_text_range()
-            # pdfium replaces a word split across lines ("learn-" / "ing") with
-            # "learn\ufffeing" on one line. U+FFFE is a soft-hyphen mark, so dropping it
-            # rejoins the word. Lines end with CRLF; normalize to what pypdf emits.
-            pages.append(text.replace("\ufffe", "").replace("\r\n", "\n").replace("\r", "\n"))
+            # Lines end with CRLF; normalize to what pypdf emits. The U+FFFE line-hyphen
+            # marks are kept here and resolved per paper in resolve_line_hyphens().
+            pages.append(text.replace("\r\n", "\n").replace("\r", "\n"))
         return pages
     finally:
         doc.close()
 
 
-def extract_pages(pdf_path: Path) -> tuple[list[str], int]:
-    """Text per page, plus how many pages came from the pypdfium2 fallback.
+def resolve_line_hyphens(pages: list[str]) -> list[str]:
+    """Turn pdfium's line-hyphen marks into either a joined word or a real hyphen.
 
-    pypdf is the primary extractor. On some papers it drops the spaces between
-    words for whole pages ("ableforthesamereport..."). Those pages are taken from
-    pypdfium2 instead, which reads the same PDFs with correct spacing.
+    "learn\ufffeing" was one word split by the line break, so it becomes "learning".
+    "real\ufffeworld" was a hyphenated compound that happened to break there, so it
+    stays "real-world". The paper's own words decide, in this order:
+
+      1. the hyphenated form appears elsewhere in the paper   -> keep the hyphen
+      2. the joined form appears elsewhere in the paper       -> join
+      3. the second half starts with a capital                -> keep ("Megatron-LM")
+      4. both halves appear elsewhere as words on their own   -> keep ("decision-makers")
+      5. otherwise                                            -> join ("fac-tuality")
     """
-    reader = PdfReader(pdf_path)
-    pages = [page.extract_text() or "" for page in reader.pages]
-    bad = [i for i, text in enumerate(pages) if text.strip() and is_garbled(text)]
-    if not bad:
-        return pages, 0
-    fallback = _pdfium_pages(pdf_path)
-    if fallback is None or len(fallback) != len(pages):
-        return pages, 0
+    unmarked = " ".join(LINE_HYPHEN_RE.sub(" ", p).replace(LINE_HYPHEN, " ") for p in pages)
+    vocab = {w.lower() for w in VOCAB_RE.findall(unmarked)}
+
+    def pick(m: re.Match) -> str:
+        left, right = m[1], m[2]
+        joined, hyphenated = left + right, f"{left}-{right}"
+        if hyphenated.lower() in vocab:
+            return hyphenated
+        if joined.lower() in vocab:
+            return joined
+        if not right[0].islower():
+            return hyphenated
+        if len(left) > 1 and len(right) > 1 and left.lower() in vocab and right.lower() in vocab:
+            return hyphenated
+        return joined
+
+    return [LINE_HYPHEN_RE.sub(pick, p).replace(LINE_HYPHEN, "") for p in pages]
+
+
+def extract_pages(pdf_path: Path) -> tuple[list[str], int, str]:
+    """Text per page, how many pages came from pypdf, and which extractor led.
+
+    pypdfium2 is the primary extractor. pypdf drops the space between some words
+    on most pages ("agentsdo", "Evenautoresearch": 0.2 to 1.9% of words on the
+    seeded papers) and, on some LaTeX font encodings, on whole pages. The sparse
+    case is invisible to is_garbled(), so pypdf cannot be trusted page by page.
+
+    pypdf is still used for the whole file when pypdfium2 is missing or cannot
+    open it, and for single pages where pypdfium2 returns nothing usable.
+    """
+    pdfium = _pdfium_pages(pdf_path)
+    if pdfium is None:
+        reader = PdfReader(pdf_path)
+        return [page.extract_text() or "" for page in reader.pages], 0, "pypdf"
+
+    pages = resolve_line_hyphens(pdfium)
+    weak = [i for i, text in enumerate(pages) if not text.strip() or is_garbled(text)]
     replaced = 0
-    for i in bad:
-        if fallback[i].strip() and not is_garbled(fallback[i]):
-            pages[i] = fallback[i]
-            replaced += 1
-    return pages, replaced
+    if weak:
+        reader = PdfReader(pdf_path)
+        if len(reader.pages) == len(pages):
+            for i in weak:
+                text = reader.pages[i].extract_text() or ""
+                if text.strip() and not is_garbled(text):
+                    pages[i] = text
+                    replaced += 1
+    return pages, replaced, "pypdfium2"
 
 
 def _line_key(line: str) -> str:
@@ -190,6 +237,15 @@ def is_appendix_heading(line: str) -> bool:
     return not (m["dot"] and DOTTED_NAME_RE.search(title))
 
 
+def _starts_reference_list(flat: list[tuple[int, str]], i: int, window: int = 8) -> bool:
+    """True when a year follows the "References" heading within `window` lines.
+
+    On the 50-paper corpus the first year comes 1 to 7 lines after the real heading.
+    A table-of-contents entry is followed by more headings, not citations.
+    """
+    return any(YEAR_RE.search(ln) for _, ln in flat[i + 1 : i + 1 + window])
+
+
 def remove_back_matter(page_lines: list[list[str]]) -> tuple[list[tuple[int, str, str]], bool, bool]:
     """Flatten to (page_no, section, line) and cut acknowledgments + references.
 
@@ -198,10 +254,19 @@ def remove_back_matter(page_lines: list[list[str]]) -> tuple[list[tuple[int, str
     an analyst would ask about.
     """
     flat = [(p + 1, ln) for p, lines in enumerate(page_lines) for ln in lines]
-    # Ignore matches in the first 30% of the paper (tables of contents, related-work mentions).
-    start_search = int(len(flat) * 0.3)
+    # Skip page 1 (title, abstract). No position cutoff beyond that: long appendices put
+    # the real heading as early as 8% of a paper's lines (2610.35715v1, refs end on p10 of
+    # 69). A table-of-contents "References" line is rejected because no years follow it.
+    start_search = next((i for i, (p, _) in enumerate(flat) if p > 1), len(flat))
 
-    ref_idx = next((i for i in range(start_search, len(flat)) if REFERENCES_RE.match(flat[i][1])), None)
+    ref_idx = next(
+        (
+            i
+            for i in range(start_search, len(flat))
+            if REFERENCES_RE.match(flat[i][1]) and _starts_reference_list(flat, i)
+        ),
+        None,
+    )
     if ref_idx is None:
         return [(p, "body", ln) for p, ln in flat], False, False
 
@@ -385,7 +450,7 @@ def process_paper(
     report = PaperReport(arxiv_id=arxiv_id, source_file=pdf_path.name)
 
     try:
-        pages, report.pages_from_fallback = extract_pages(pdf_path)
+        pages, report.pages_from_fallback, report.extractor = extract_pages(pdf_path)
     except (PdfReadError, OSError, ValueError) as exc:  # corrupt or encrypted PDF: record it, keep going
         report.status = f"extract_failed: {exc.__class__.__name__}"
         return [], report
@@ -428,9 +493,11 @@ def process_paper(
     report.chunks = len(chunks)
     produced = report.chunks + report.dropped_garbled + report.dropped_duplicates
     if produced and report.dropped_garbled / produced > LOW_QUALITY_SHARE:
-        report.status = "warn: pypdf lost word spacing, most chunks dropped"
+        report.status = f"warn: {report.extractor} lost word spacing, most chunks dropped"
     elif not report.references_removed:
         report.status = "warn: no references heading found"
+    elif report.extractor == "pypdf":
+        report.status = "warn: parsed with pypdf only, some words may be joined (install pypdfium2)"
     return chunks, report
 
 
