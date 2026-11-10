@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MessageList from "@/components/MessageList";
-import ChatInput from "@/components/ChatInput";
+import ChatInput, { type Attachment } from "@/components/ChatInput";
 import { getReply, listPapers, uploadPdfs, type Paper } from "@/lib/assistant";
 import { loadChats, saveChats, uid } from "@/lib/storage";
 import type { Chat, Message } from "@/lib/types";
@@ -16,8 +16,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [papers, setPapers] = useState<Paper[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [notice, setNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
@@ -28,28 +27,36 @@ export default function Home() {
     listPapers().then(setPapers);
   }, []);
 
+  const uploading = attachments.some((a) => a.status === "uploading");
+
+  // The API saves files under a sanitized name, so compare on the same normalization.
+  const norm = (name: string) => name.replace(/\.pdf$/i, "").replace(/[^\w.\- ]+/g, "").trim().toLowerCase();
+
+  const patch = (ids: string[], fn: (a: Attachment) => Attachment) =>
+    setAttachments((prev) => prev.map((a) => (ids.includes(a.id) ? fn(a) : a)));
+
   const upload = async (files: File[]) => {
     const pdfs = files.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
-    if (pdfs.length === 0) {
-      setNotice({ kind: "err", text: "Only PDF files can be added." });
-      return;
-    }
-    setUploading(true);
-    setNotice(null);
+    const rejected: Attachment[] = files
+      .filter((f) => !pdfs.includes(f))
+      .map((f) => ({ id: uid(), name: f.name, status: "error", error: "Not a PDF" }));
+    const chips: Attachment[] = pdfs.map((f) => ({ id: uid(), name: f.name, status: "uploading" }));
+    setAttachments((prev) => [...prev, ...rejected, ...chips]);
+    if (chips.length === 0) return;
+    const ids = chips.map((c) => c.id);
     try {
       const { added, skipped } = await uploadPdfs(pdfs);
-      const parts: string[] = [];
-      if (added.length) parts.push(`Added ${added.map((p) => p.title).join(", ")}. You can ask about it now.`);
-      if (skipped.length)
-        parts.push(
-          `Skipped ${skipped.map((p) => p.file).join(", ")}: no usable text (scanned, protected, or a duplicate of a paper already indexed).`
-        );
-      setNotice({ kind: skipped.length ? "err" : "ok", text: parts.join(" ") });
+      const addedKeys = new Set(added.map((p) => norm(p.file)));
+      const skippedKeys = new Set(skipped.map((p) => norm(p.file)));
+      patch(ids, (a) =>
+        skippedKeys.has(norm(a.name)) && !addedKeys.has(norm(a.name))
+          ? { ...a, status: "error", error: "No usable text" }
+          : { ...a, status: "ready" }
+      );
       setPapers(await listPapers());
     } catch (e) {
-      setNotice({ kind: "err", text: e instanceof Error ? e.message : "Upload failed." });
-    } finally {
-      setUploading(false);
+      const msg = e instanceof Error ? e.message : "Upload failed";
+      patch(ids, (a) => ({ ...a, status: "error", error: msg }));
     }
   };
 
@@ -86,7 +93,15 @@ export default function Home() {
       setChats((prev) => [c, ...prev]);
       setActiveId(c.id);
     }
-    const userMsg: Message = { id: uid(), role: "user", content: text, createdAt: Date.now() };
+    const names = attachments.filter((a) => a.status === "ready").map((a) => a.name);
+    const userMsg: Message = {
+      id: uid(),
+      role: "user",
+      content: text,
+      createdAt: Date.now(),
+      ...(names.length ? { attachments: names } : {}),
+    };
+    setAttachments([]);
     update(chat.id, (c) => ({
       ...c,
       title: c.messages.length === 0 ? text.slice(0, 40) : c.title,
@@ -132,12 +147,6 @@ export default function Home() {
         <header className="border-b border-black/10 px-6 py-3 text-[15px] font-medium">
           {active?.title ?? "New chat"}
         </header>
-        {(uploading || notice) && (
-          <div className={`px-6 py-2 text-sm ${uploading ? "bg-blue-50 text-blue-900" : notice?.kind === "ok" ? "bg-green-50 text-green-900" : "bg-amber-50 text-amber-900"}`}>
-            {uploading ? "Adding PDFs and rebuilding the index… this can take a minute." : notice?.text}
-            {!uploading && <button onClick={() => setNotice(null)} className="ml-2 underline">Dismiss</button>}
-          </div>
-        )}
         <MessageList
           messages={active?.messages ?? []}
           loading={loading}
@@ -145,7 +154,13 @@ export default function Home() {
           onRetry={retry}
           onStarter={send}
         />
-        <ChatInput disabled={loading || uploading} uploading={uploading} onSend={send} onUpload={upload} />
+        <ChatInput
+          disabled={loading}
+          attachments={attachments}
+          onRemove={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
+          onSend={send}
+          onUpload={upload}
+        />
       </main>
     </div>
   );

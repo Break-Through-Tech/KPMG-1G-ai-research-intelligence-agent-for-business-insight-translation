@@ -13,6 +13,7 @@ export type Message = {
   content: string;
   sources?: Source[];
   warning?: string;
+  attachments?: string[];
   createdAt: number;
 };
 

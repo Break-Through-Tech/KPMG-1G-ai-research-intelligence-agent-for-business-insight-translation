@@ -44,7 +44,13 @@ export default function MessageList({ messages, loading, error, onRetry, onStart
       <div className="mx-auto max-w-3xl space-y-5 px-6 py-6">
         {messages.map((m) =>
           m.role === "user" ? (
-            <div key={m.id} className="flex justify-end">
+            <div key={m.id} className="flex flex-col items-end gap-1.5">
+              {m.attachments?.map((name, i) => (
+                <div key={i} className="flex max-w-[75%] items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-xs text-black/70">
+                  <span aria-hidden>📄</span>
+                  <span className="truncate">{name}</span>
+                </div>
+              ))}
               <div className="max-w-[75%] whitespace-pre-wrap rounded-2xl bg-white px-4 py-2 text-[15px] shadow-[0_0_0_0.5px_rgba(0,0,0,0.12)]">
                 {m.content}
               </div>
