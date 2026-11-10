@@ -24,6 +24,7 @@ python-dotenv>=1.0.0
 # Web interaction layer (src/api.py)
 fastapi>=0.115.0
 uvicorn>=0.30.0
+python-multipart>=0.0.9  # file uploads in src/api.py
 
 # Optional LLM providers (LLM_PROVIDER in .env)
 langchain-groq>=0.3.0

@@ -27,3 +27,30 @@ export async function getReply(
     warning: unknown.length ? `Cites papers that weren't retrieved: ${unknown.join(", ")}` : undefined,
   };
 }
+
+export type Paper = { file: string; arxivId: string | null; title: string; chunks?: number; status?: string };
+
+export async function listPapers(): Promise<Paper[]> {
+  try {
+    const res = await fetch(`${API_URL}/papers`);
+    if (!res.ok) return [];
+    return (await res.json()).papers ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Saves PDFs into data/ and rebuilds the index via src/api.py. Can take a minute. */
+export async function uploadPdfs(files: File[]): Promise<{ added: Paper[]; skipped: Paper[] }> {
+  const body = new FormData();
+  files.forEach((f) => body.append("files", f));
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/upload`, { method: "POST", body });
+  } catch {
+    throw new Error("Can't reach the API. Is uvicorn running on port 8000?");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail ?? `Upload failed (${res.status})`);
+  return { added: data.added ?? [], skipped: data.skipped ?? [] };
+}

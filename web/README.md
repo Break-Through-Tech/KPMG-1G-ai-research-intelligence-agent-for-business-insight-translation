@@ -22,3 +22,9 @@ No pipeline logic lives in the web layer, so improvements to retrieve.py / summa
 ## Limits
 - Single-turn: each question is answered on its own; earlier messages aren't sent to the model.
 - History lives in one browser on one machine.
+
+## Adding PDFs
+Drag PDFs onto the chat (or click +). The API saves them to `data/` and reruns `parse_and_chunk.py` and `build_index.py`, so it takes a minute.
+- Name arXiv papers like `2608.20319v1_Title.pdf` so citations and links work. Other PDFs are searchable but show as "Uploaded PDF" without an arXiv link.
+- Uploads with no usable text (scanned, protected, or a duplicate of an indexed paper) are skipped.
+- `data/*.pdf` is gitignored, so uploads stay on your machine.

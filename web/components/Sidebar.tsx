@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { Chat } from "@/lib/types";
+import type { Paper } from "@/lib/assistant";
 
 type Props = {
   chats: Chat[];
@@ -9,10 +10,12 @@ type Props = {
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  papers: Paper[];
 };
 
-export default function Sidebar({ chats, activeId, onNew, onSelect, onRename, onDelete }: Props) {
+export default function Sidebar({ chats, activeId, onNew, onSelect, onRename, onDelete, papers }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showPapers, setShowPapers] = useState(false);
   const [draft, setDraft] = useState("");
 
   const commit = (id: string) => {
@@ -76,6 +79,20 @@ export default function Sidebar({ chats, activeId, onNew, onSelect, onRename, on
           </div>
         ))}
       </nav>
+
+      <div className="mt-3 border-t border-black/10 pt-3">
+        <button onClick={() => setShowPapers(!showPapers)} className="w-full px-2 text-left text-xs text-black/45 hover:text-black/70">
+          {showPapers ? "▾" : "▸"} Papers in index ({papers.length})
+        </button>
+        {showPapers && (
+          <ul className="mt-1 max-h-48 space-y-1 overflow-y-auto px-2 text-xs text-black/60">
+            {papers.map((p) => (
+              <li key={p.file} className="truncate" title={p.title}>{p.title}</li>
+            ))}
+            {papers.length === 0 && <li className="text-black/40">Start the API to see papers.</li>}
+          </ul>
+        )}
+      </div>
 
       <div className="mt-3 flex items-center gap-2 border-t border-black/10 px-2 pt-3 text-sm">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs text-blue-800">C</div>
