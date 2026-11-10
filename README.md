@@ -150,7 +150,7 @@ Baseline stack, per the Challenge Advisor's recommended tooling:
 
 | Stage | Choice |
 |---|---|
-| PDF parsing | `pypdf`, with `pypdfium2` for pages where pypdf loses the word spacing |
+| PDF parsing | `pypdfium2`, with `pypdf` for pages pypdfium2 cannot read (pypdf alone joins some words, e.g. "agentsdo") |
 | Chunking | 120-word chunks, 20-word overlap, near-duplicates removed |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2`, centered, with a CSLS hub correction |
 | Vector store | `ChromaDB` |
@@ -166,14 +166,16 @@ The reasons for each retrieval choice, and the alternatives that were tested and
 
 ### Ranking and relevance (Nov, Issue #15)
 
-Same corpus, benchmark and embedding model as the Oct 27 baseline below (5,940 chunks after the parser fix).
+Same corpus, benchmark and embedding model as the Oct 27 baseline below. Nov 3 is the Issue #15
+retrieval work on 5,940 chunks. Nov 10 is the same retrieval on 6,379 chunks from the fixed parser
+(see "Parser" below).
 
-| Metric | Oct 27 baseline | Now |
-|---|---|---|
-| Recall@1 | 0.542 | 0.696 |
-| Recall@3 | 0.814 | 0.853 |
-| Recall@5 | 0.846 | 0.904 |
-| MRR | 0.761 | 0.854 |
+| Metric | Oct 27 baseline | Nov 3 | Nov 10 |
+|---|---|---|---|
+| Recall@1 | 0.542 | 0.696 | 0.657 |
+| Recall@3 | 0.814 | 0.853 | 0.875 |
+| Recall@5 | 0.846 | 0.904 | 0.904 |
+| MRR | 0.761 | 0.854 | 0.835 |
 
 ![Retrieval scores before and after](docs/figures/before_after.png)
 
@@ -186,11 +188,17 @@ What changed:
   prompts). It improves both halves of the benchmark, needs no new model and adds no query time.
 - **More papers reach the LLM.** `summarize.py` now sends 8 chunks with at most 2 per paper. On
   multi-paper questions, the share of relevant papers in the LLM's context went from 0.278 to 0.625.
-- **Parser fallback.** G-CARL (2608.20331v1) now yields 49 chunks instead of 25.
+- **Parser.** pypdfium2 is now the primary extractor. pypdf joined words on ordinary pages
+  ("agentsdo", "Evenautoresearch") too sparsely for the garbled-page check to catch, and those
+  passages reached the UI and the LLM. Line-break hyphens now keep real compounds ("real-world")
+  and rejoin split words ("learning"). The reference list is found in all 50 papers (5 were
+  missed before, so their bibliographies were being indexed). G-CARL (2608.20331v1) yields 58
+  chunks, up from 25 on Oct 27. Retrieval moves within the noise band described in
+  `docs/eval/retrieval_tuning_nov.md`; the papers that reach the LLM do not change.
 - **"Not covered" handling.** 13 questions the corpus cannot answer are in
   `data/benchmark/out_of_scope.jsonl`. No retrieval score separates them cleanly from real
-  questions, so a conservative floor stops the obvious ones (2 of 13, no in-scope question
-  affected) and the prompt handles the rest.
+  questions, so a conservative floor stops the obvious ones (3 of 13 on the Nov 10 index, no
+  in-scope question affected) and the prompt handles the rest.
 - **Prompt v2** follows the answer pattern in the advisor's sample-prompts document: answer,
   evidence per paper, limitations, business implications, citations with author and date. It has
   not been scored yet (needs a Gemini key); `summarize.py --batch` runs v1 and v2 over the
@@ -250,7 +258,8 @@ python src/evaluate_retrieval.py --benchmark data/benchmark/smoke_questions.json
 python src/plot_eval.py --baseline-dir data/processed/eval_baseline   # redraws docs/figures/
 ```
 
-The parser fallback does not change the baseline scores; G-CARL was already found at rank 2.
+The Oct 27 baseline numbers come from the old parser. Rerunning these commands now gives the Nov 10
+column, because `parse_and_chunk.py` produces different chunks.
 
 Summary accuracy and business usefulness (1-5 rubrics) are not scored yet. That needs a Gemini key
 and `python src/summarize.py --batch data/benchmark/questions.jsonl`.
