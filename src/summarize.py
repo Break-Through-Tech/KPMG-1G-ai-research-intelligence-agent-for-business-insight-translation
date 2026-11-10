@@ -109,9 +109,27 @@ def summarize(question: str, search: Callable[[str, int], Sequence], llm, k: int
 def make_llm(model: str | None = None):
     # No temperature on purpose: Google's Gemini 3 guide says to leave it at the default.
     from dotenv import load_dotenv
-    from langchain_google_genai import ChatGoogleGenerativeAI
 
     load_dotenv()
+    provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+    if provider == "groq":
+        # Hosted open models on Groq (https://console.groq.com). Free tier is rate-limited.
+        from langchain_groq import ChatGroq
+
+        if not os.getenv("GROQ_API_KEY"):
+            raise SystemExit("GROQ_API_KEY is not set. Add it to .env or unset LLM_PROVIDER.")
+        model = model or os.getenv("GROQ_MODEL") or "openai/gpt-oss-120b"
+        return ChatGroq(model=model, temperature=0, max_retries=2)
+    if provider == "ollama":
+        # Local model through Ollama (https://ollama.com). No key, no rate limits.
+        #   ollama pull llama3.1:8b   then set LLM_PROVIDER=ollama in .env
+        from langchain_ollama import ChatOllama
+
+        model = model or os.getenv("OLLAMA_MODEL") or "llama3.1:8b"
+        return ChatOllama(model=model, temperature=0)
+
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
     if not os.getenv("GOOGLE_API_KEY"):
         raise SystemExit("GOOGLE_API_KEY is not set. Copy .env.example to .env and add your key.")
     model = model or os.getenv("GEMINI_MODEL") or DEFAULT_MODEL

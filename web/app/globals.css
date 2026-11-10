@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+html, body { height: 100%; }
+body { background: #f7f7f5; color: #1f1f1d; }

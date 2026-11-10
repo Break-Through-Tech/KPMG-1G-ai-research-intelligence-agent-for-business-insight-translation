@@ -20,3 +20,11 @@ numpy>=1.26.0
 
 # Config
 python-dotenv>=1.0.0
+
+# Web interaction layer (src/api.py)
+fastapi>=0.115.0
+uvicorn>=0.30.0
+
+# Optional LLM providers (LLM_PROVIDER in .env)
+langchain-groq>=0.3.0
+langchain-ollama>=0.3.0
