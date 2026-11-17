@@ -101,6 +101,12 @@ pip install -r requirements.txt
 
 API keys go in a local `.env` file. Never commit a key.
 
+```bash
+cp .env.example .env
+```
+
+Then set `LLM_PROVIDER=groq` and `GROQ_API_KEY` (free key at https://console.groq.com/keys), or leave `LLM_PROVIDER` empty and set `GOOGLE_API_KEY` for Gemini. To run the chat UI, see [web/README.md](web/README.md).
+
 **4. Data**
 
 Five seeded arXiv cs.AI papers are already in `data/`. The full corpus is pulled by the
@@ -118,7 +124,7 @@ Shared Drive folder: [KPMG 1G — AI Studio Fall 2026](https://drive.google.com/
 python src/parse_and_chunk.py                  # data/*.pdf -> data/processed/chunks.jsonl
 python src/build_index.py                      # -> chroma_db/ (first run downloads the embedding model)
 python src/retrieve.py "your question" -k 5    # try a query
-python src/summarize.py "your question" -k 5   # cited answer (needs GOOGLE_API_KEY in .env)
+python src/summarize.py "your question" -k 5   # cited answer (needs a Groq or Gemini key in .env)
 python src/evaluate_retrieval.py --benchmark data/benchmark/smoke_questions.jsonl
 python -m unittest discover -s tests -v
 ```
